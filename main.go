@@ -34,6 +34,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -41,9 +42,12 @@ import (
 	"tac/echo1/dal"
 	"time"
 
-	echotemplate "github.com/foolin/echo-template"
-	"github.com/labstack/echo"
-	"github.com/labstack/echo/middleware"
+	"github.com/foolin/goview"
+	"github.com/foolin/goview/supports/echoview-v4"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+
+	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -52,6 +56,24 @@ const (
 
 // H is like a echo.Map interface
 type H map[string]interface{}
+
+/****
+// TemplateRenderer is a custom html/template renderer for Echo framework
+type TemplateRenderer struct {
+	templates *template.Template
+}
+
+// Render renders a template document
+func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+
+	// Add global methods if data is a map
+	if viewContext, isMap := data.(map[string]interface{}); isMap {
+		viewContext["reverse"] = c.Echo().Reverse
+	}
+
+	return t.templates.ExecuteTemplate(w, name, data)
+}
+***/
 
 func getDbPath() string {
 	dbPath := os.Getenv("LOCAL_DB_PATH")
@@ -89,7 +111,6 @@ func health(c echo.Context) error {
 	return c.String(http.StatusOK, "OK-SQLITE:"+v)
 }
 
-
 func bonusOneHd(c echo.Context) error {
 	id := c.Param("id")
 	log.Printf("id is '%v'", id)
@@ -110,7 +131,7 @@ func bonusHd(c echo.Context) error {
 	return err
 }
 
-func helloHd(c echo.Context) error {
+func HelloHd(c echo.Context) error {
 	return c.JSON(http.StatusOK, H{
 		"code":    1002,
 		"message": "user successfully updated",
@@ -130,8 +151,84 @@ func chart1Hd(c echo.Context) error {
 func indexHd(c echo.Context) error {
 	c.Logger().Warn("in index Handler")
 	return c.Render(http.StatusOK, "index", echo.Map{
-		"title": "Index title!",
+		"title": "Index Title!",
 		"name":  "Olá Mundo Novo"})
+}
+
+func upload(c echo.Context) error {
+	// Read form fields
+	name := c.FormValue("name")
+
+	//-----------
+	// Read file
+	//-----------
+
+	// Source
+	file, err := c.FormFile("file")
+	if err != nil {
+		return err
+	}
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fnPath := filepath.Join(cwd, "docs", file.Filename)
+	log.Printf("[INFO] Uploading file '%s' to path '%s'", file.Filename, fnPath)
+
+	// Destination
+	dst, err := os.Create(fnPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	// Copy
+	if _, err = io.Copy(dst, src); err != nil {
+		return err
+	}
+	html1 := fmt.Sprintf("<html><p>File %s uploaded successfully with fields name=%s.</p><p>See file <a href='/docs/%s'>here</a></p></html>",
+		file.Filename, name, file.Filename)
+	return c.HTML(http.StatusOK, html1)
+}
+
+type (
+	User1 struct {
+		Name  string `json:"name" form:"name" validate:"required"`
+		Email string `json:"email" form:"email" validate:"required,email"`
+		Age   uint8  `json:"age" form:"age" validate:"gte=0,lte=100"`
+	}
+
+	CustomValidator struct {
+		validator *validator.Validate
+	}
+)
+
+func (cv *CustomValidator) Validate(i interface{}) error {
+	return cv.validator.Struct(i)
+}
+
+func form1Hd(c echo.Context) error {
+	u := new(User1)
+
+	if err := c.Bind(u); err != nil {
+		return err
+	}
+	log.Printf("[INFO] user1 is %v", *u)
+
+	if err := c.Validate(u); err != nil {
+		log.Printf("[ERROR] Validate: %v", err)
+		return c.JSON(http.StatusOK, H{
+			"type":  "validate",
+			"error": err.Error(),
+		})
+	}
+	return c.JSON(http.StatusOK, u)
 }
 
 func routes(e *echo.Echo) {
@@ -139,17 +236,18 @@ func routes(e *echo.Echo) {
 	e.GET("/idx", indexHd)
 	e.GET("/page", func(c echo.Context) error {
 		//render only file, must full name with extension
-		return c.Render(http.StatusOK, "index1.html", echo.Map{"title": "Page file title!!", "name": "Page 1"})
+		return c.Render(http.StatusOK, "index1.html", echo.Map{"title": "Page1 Title!!", "name": "Page 1"})
 	})
 	e.GET("/chart1", chart1Hd)
-	e.GET("/hello", helloHd)
+	e.GET("/hello", HelloHd)
+	e.POST("/upload", upload)
 	e.GET("/health", health)
 	e.GET("/api/bonus", bonusHd)
 	e.GET("/api/bonus/:id", bonusOneHd)
 	e.GET("/rt", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, H{"rt": e.Routes()})
 	})
-
+	e.POST("/form1", form1Hd)
 }
 
 func main() {
@@ -176,23 +274,27 @@ func main() {
 		}))
 	}
 
-	//e.Debug = true
+	e.Validator = &CustomValidator{validator: validator.New()}
+
+	e.Debug = true
 
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
 	e.Static("/", "static")
-
-	e.Renderer = echotemplate.New(echotemplate.TemplateConfig{
-		Root:      "templates",
+	e.Static("/docs", "docs")
+	//
+	e.Renderer = echoview.New(goview.Config{
+		Root:      "templates", // default: "views"
 		Extension: ".html",
 		Master:    "layouts/master",
 		Funcs: template.FuncMap{
 			"copyDt": func() string {
-				return time.Now().Format("01-2006") //t.Format("2006-01-02T15:04:05.999999-07:00"))
+				return time.Now().Format("02-01-2006") //t.Format("2006-01-02T15:04:05.999999-07:00"))
 			},
 		},
 		DisableCache: false,
 	})
+	//e.Renderer = echoview.Default()
 
 	routes(e)
 

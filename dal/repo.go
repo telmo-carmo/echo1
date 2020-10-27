@@ -6,9 +6,11 @@ import (
 	"log"
 
 	// db driver
+	//_ "github.com/iamacarpet/go-sqlite3-win64"
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Repo is dal interface
 type Repo struct {
 	db *sql.DB
 }
@@ -58,9 +60,10 @@ func (r *Repo) GetBonus(id string) string {
 			}
 			log.Printf("[WARN] Query row error: %v", err)
 			return "{}"
-		} else {
-			log.Printf("[INFO] Ename:%s, Job:%s, Sal:%d\n", tempBn.Ename, tempBn.Job, tempBn.Sal)
 		}
+
+		log.Printf("[INFO] Ename:%s, Job:%s, Sal:%d\n", tempBn.Ename, tempBn.Job, tempBn.Sal)
+
 		ba, err := json.Marshal(tempBn)
 		if err != nil {
 			log.Printf("[ERROR] json encode error: %v", err)

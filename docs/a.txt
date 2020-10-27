@@ -1,0 +1,7 @@
+Package  XX    Version Latest Type 
+-------------- ------- ------ -----
+more-itertools 8.0.2   8.1.0  wheel
+packaging      19.2    20.0   wheel
+PyScreeze      0.1.25  0.1.26 sdist
+setuptools     44.0.0  45.0.0 wheel
+wcwidth        0.1.7   0.1.8  wheel

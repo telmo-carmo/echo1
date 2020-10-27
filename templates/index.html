@@ -4,6 +4,15 @@
     <hr>
     <img src="/img/hua1.jpg"/>
     <p><a href="/page">Page1 render</a></p>
+
+    <h3>Upload single file with fields</h3>
+
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        Name: <input type="text" name="name"><br>
+        Files: <input type="file" name="file"><br><br>
+        <input type="submit" value="Upload">
+    </form>
+
 {{end}}
 
 {{define "my_footer"}}

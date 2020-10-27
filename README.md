@@ -29,3 +29,9 @@ $ git remote -v
 
 $ git push origin master
 # Pushes the changes in your local repository up to the remote repository you specified as the origin
+
+# if you get error "! [rejected]        master -> master (non-fast-forward)" do
+
+$ git push --force https://github.com/telmo-carmo/echo1.git
+
+
